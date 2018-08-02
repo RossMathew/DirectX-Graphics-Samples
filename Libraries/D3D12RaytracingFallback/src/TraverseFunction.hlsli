@@ -757,7 +757,6 @@ bool Traverse(
     uint2 rootInfo = 0;
     StackPush(nodesToProcess[TOP_LEVEL_INDEX], TOP_LEVEL_INDEX, rootInfo, currentDepth);
 
-/*
     uint moo = 0;
     MARK(2, 0);
     do
@@ -887,7 +886,7 @@ bool Traverse(
         }
     } while(nodesToProcess[currentBVHLevel] != 0);
     MARK(10,0);
-*/
+
     bool isHit = Fallback_InstanceIndex() != NO_HIT_SENTINEL;
 #if ENABLE_ACCELERATION_STRUCTURE_VISUALIZATION
     VisualizeAcceleratonStructure(g_hitDepth);
