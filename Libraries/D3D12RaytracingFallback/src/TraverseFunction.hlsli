@@ -14,15 +14,13 @@
 
 #define TOP_LEVEL_INDEX 0
 #define BOTTOM_LEVEL_INDEX 1
-#define NUM_BVH_LEVELS 3
-
-static float g_closestBoxT = FLT_MAX;
+#define NUM_BVH_LEVELS 2
 
 static
 uint2 stacks[NUM_BVH_LEVELS][TRAVERSAL_MAX_STACK_DEPTH];
 
 #if ENABLE_ACCELERATION_STRUCTURE_VISUALIZATION
-RWTexture2D<float4> g_screenOutput : register(u2);
+RWTexture2D<float4> g_screenOutput : register(u0);
 
 void VisualizeAcceleratonStructure(uint depth)
 {   
@@ -43,6 +41,7 @@ void VisualizeAcceleratonStructure(uint depth)
 static 
 uint depthStack[NUM_BVH_LEVELS][TRAVERSAL_MAX_STACK_DEPTH];
 
+static float g_closestBoxT = FLT_MAX;
 static int g_hitDepth = 0;
 #endif
 
@@ -70,11 +69,11 @@ void StackPush(inout int stackTop, uint level, uint2 nodeInfo, uint depth)
 {
     uint stackIndex = stackTop++;
 
-    stacks[level][stackIndex] = nodeInfo;
-
 #if ENABLE_ACCELERATION_STRUCTURE_VISUALIZATION
     depthStack[level][stackIndex] = depth;
 #endif
+    
+    stacks[level][stackIndex] = nodeInfo;
 }
 
 uint2 StackPop(inout int stackTop, uint level, out uint depth)
@@ -623,8 +622,15 @@ inline bool CheckHitTriangles(
 #if !ENABLE_ACCELERATION_STRUCTURE_VISUALIZATION
     Fallback_SetPendingTriVals(hitGroupRecordOffset, primitiveIndex, blasContext.instanceIndex, blasContext.instanceId, resultT, hitKind);
 #endif
+
+#if ENABLE_ACCELERATION_STRUCTURE_VISUALIZATION
     g_closestBoxT = min(g_closestBoxT, resultT);
     bool isClosestHit = g_closestBoxT == resultT;
+    if (isClosestHit)
+    {
+        g_hitDepth = searchDepth;
+    }
+#endif
 
 #ifdef DISABLE_ANYHIT 
     bool skipAnyHit = true;
@@ -658,13 +664,6 @@ inline bool CheckHitTriangles(
 
         hitEndsSearch = (ret == END_SEARCH) || (RayFlags() & RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH);
     }
-
-#if ENABLE_ACCELERATION_STRUCTURE_VISUALIZATION
-    if (isClosestHit)
-    {
-        g_hitDepth = searchDepth;
-    }
-#endif
 
     return hitEndsSearch;
 }
@@ -758,6 +757,8 @@ bool Traverse(
     uint2 rootInfo = 0;
     StackPush(nodesToProcess[TOP_LEVEL_INDEX], TOP_LEVEL_INDEX, rootInfo, currentDepth);
 
+/*
+    uint moo = 0;
     MARK(2, 0);
     do
     {
@@ -782,10 +783,6 @@ bool Traverse(
                 {
                     MARK(7, 0);
                     
-                    currentBVHLevel = BOTTOM_LEVEL_INDEX;
-
-                    StackPush(nodesToProcess[BOTTOM_LEVEL_INDEX], BOTTOM_LEVEL_INDEX, rootInfo, currentDepth + 1);
-                    
                     currentRayData = blasContext.rayData;
                     currentBVH = CreateRWByteAddressBufferPointerFromGpuVA(blasContext.instanceGpuVA);
                     
@@ -795,6 +792,10 @@ bool Traverse(
                         blasContext.worldToObject, 
                         blasContext.objectToWorld
                     );
+                    
+                    StackPush(nodesToProcess[BOTTOM_LEVEL_INDEX], BOTTOM_LEVEL_INDEX, rootInfo, currentDepth + 1);
+                    currentBVHLevel = BOTTOM_LEVEL_INDEX;
+                    // g_hitDepth = moo; 
                 }
             }
             else // if it's a bottom level
@@ -810,10 +811,12 @@ bool Traverse(
                 {
                     break;
                 }
+                // g_hitDepth = moo == 1 ? 8 : 30;
             }
         }
         else
         {
+            moo++;
             MARK(4, 0);
             BoundingBox leftBox, rightBox;
             uint2 leftInfo, rightInfo;
@@ -831,22 +834,13 @@ bool Traverse(
                 leftBox.center,
                 leftBox.halfDim);
 
-            if (IsDummy(rightInfo))
-            {
-                rightHit = false;
-            }
-            else
-            {
-                rightHit = RayBoxTest(
-                    rightT,
-                    RayTCurrent(),
-                    currentRayData.OriginTimesRayInverseDirection,
-                    currentRayData.InverseDirection,
-                    rightBox.center,
-                    rightBox.halfDim);
-            }
-
-            RecordClosestBox(currentBVHLevel, leftHit, leftT, rightHit, rightT, g_closestBoxT);
+            rightHit = !IsDummy(rightInfo) && RayBoxTest(
+                rightT,
+                RayTCurrent(),
+                currentRayData.OriginTimesRayInverseDirection,
+                currentRayData.InverseDirection,
+                rightBox.center,
+                rightBox.halfDim);
 
             bool singleHit, doubleHit;
             
@@ -871,7 +865,6 @@ bool Traverse(
                 firstInfo = leftHit ? leftInfo : rightInfo;
             }
 
-
             if (doubleHit)
             {
                 StackPush(nodesToProcess[currentBVHLevel], currentBVHLevel, secondInfo, currentDepth + 1);
@@ -894,10 +887,11 @@ bool Traverse(
         }
     } while(nodesToProcess[currentBVHLevel] != 0);
     MARK(10,0);
+*/
     bool isHit = Fallback_InstanceIndex() != NO_HIT_SENTINEL;
 #if ENABLE_ACCELERATION_STRUCTURE_VISUALIZATION
     VisualizeAcceleratonStructure(g_hitDepth);
 #endif
 
-    return isHit;   
+    return isHit;
 }
